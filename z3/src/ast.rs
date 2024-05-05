@@ -618,8 +618,23 @@ impl<'ctx> Float<'ctx> {
         }
     }
 
+    pub fn as_f32(&self) -> f32 {
+        self.as_f64() as f32
+    }
+
     pub fn as_f64(&self) -> f64 {
         unsafe { Z3_get_numeral_double(self.ctx.z3_ctx, self.z3_ast) }
+    }
+
+    pub fn as_numeral_string(&self) -> Option<std::string::String> {
+        unsafe {
+            let stringified = Z3_get_numeral_string(self.ctx.z3_ctx, self.z3_ast);
+            if !stringified.is_null() {
+                String::wrap(self.ctx, stringified as *mut _).as_string()
+            } else {
+                None
+            }
+        }
     }
 }
 
