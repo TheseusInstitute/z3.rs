@@ -1116,6 +1116,23 @@ impl<'ctx> Float<'ctx> {
         unsafe { Self::wrap(ctx, Z3_mk_fpa_round_toward_positive(ctx.z3_ctx) as Z3_ast) }
     }
 
+    pub fn round_towards_nearest_even(ctx: &'ctx Context) -> Float<'ctx> {
+        unsafe { Self::wrap(ctx, Z3_mk_fpa_rne(ctx.z3_ctx) as Z3_ast) }
+    }
+
+    pub fn round_towards_nearest_ties_to_away(ctx: &'ctx Context) -> Float<'ctx> {
+        unsafe {
+            Self::wrap(
+                ctx,
+                Z3_mk_fpa_round_nearest_ties_to_away(ctx.z3_ctx) as Z3_ast,
+            )
+        }
+    }
+
+    pub fn rounding_mode_sort(ctx: &'ctx Context) -> Sort<'ctx> {
+        unsafe { Sort::wrap(ctx, Z3_mk_fpa_rounding_mode_sort(ctx.z3_ctx)) }
+    }
+
     // Add two floats of the same size, rounding towards zero
     pub fn add_towards_zero(&self, other: &Self) -> Float<'ctx> {
         Self::round_towards_zero(self.ctx).add(self, other)
