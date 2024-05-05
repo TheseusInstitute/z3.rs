@@ -142,7 +142,7 @@ macro_rules! binop {
     };
 }
 
-macro_rules! trinop {
+macro_rules! trinop_rounding {
     (
         $(
             $( #[ $attr:meta ] )* $f:ident ( $z3fn:ident, $retty:ty ) ;
@@ -150,11 +150,11 @@ macro_rules! trinop {
     ) => {
         $(
             $( #[ $attr ] )*
-            pub fn $f(&self, a: &Self, b: &Self) -> $retty {
-                assert!((self.ctx == a.ctx) && (a.ctx == b.ctx));
+            pub fn $f(&self, rounding_mode: &Self, other: &Self) -> $retty {
+                assert!((self.ctx == rounding_mode.ctx) && (rounding_mode.ctx == other.ctx));
                 unsafe {
                     <$retty>::wrap(self.ctx, {
-                        $z3fn(self.ctx.z3_ctx, self.z3_ast, a.z3_ast, b.z3_ast)
+                        $z3fn(self.ctx.z3_ctx, rounding_mode.z3_ast, self.z3_ast, other.z3_ast)
                     })
                 }
             }
@@ -1163,7 +1163,7 @@ impl<'ctx> Float<'ctx> {
         gt(Z3_mk_fpa_gt, Bool<'ctx>);
         ge(Z3_mk_fpa_geq, Bool<'ctx>);
     }
-    trinop! {
+    trinop_rounding! {
         add(Z3_mk_fpa_add, Self);
         sub(Z3_mk_fpa_sub, Self);
         mul(Z3_mk_fpa_mul, Self);
