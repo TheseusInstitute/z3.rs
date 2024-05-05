@@ -7,9 +7,13 @@ use z3_sys::*;
 use crate::{Context, FuncDecl, Sort, SortDiffers, Symbol};
 
 impl<'ctx> Sort<'ctx> {
-    pub(crate) unsafe fn wrap(ctx: &'ctx Context, z3_sort: Z3_sort) -> Sort<'ctx> {
+    pub unsafe fn wrap(ctx: &'ctx Context, z3_sort: Z3_sort) -> Sort<'ctx> {
         Z3_inc_ref(ctx.z3_ctx, Z3_sort_to_ast(ctx.z3_ctx, z3_sort));
         Sort { ctx, z3_sort }
+    }
+
+    pub fn get_z3_sort(&self) -> Z3_sort {
+        self.z3_sort
     }
 
     pub fn uninterpreted(ctx: &'ctx Context, name: Symbol) -> Sort<'ctx> {
