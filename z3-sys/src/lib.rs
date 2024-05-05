@@ -6850,7 +6850,7 @@ extern "C" {
     /// - [`Z3_mk_fpa_round_toward_negative`]
     /// - [`Z3_mk_fpa_round_toward_positive`]
     /// - [`Z3_mk_fpa_round_toward_zero`]
-    pub fn Z3_mk_fpa_round_nearest_ties_to_even(c: Z3_context) -> Z3_ast;
+    pub fn Z3_mk_fpa_round_nearest_ties_to_even(c: Z3_context) -> Z3_sort;
 
     /// Create a numeral of RoundingMode sort which represents the NearestTiesToEven rounding mode.
     ///
@@ -6865,7 +6865,7 @@ extern "C" {
     /// - [`Z3_mk_fpa_rtn`]
     /// - [`Z3_mk_fpa_rtp`]
     /// - [`Z3_mk_fpa_rtz`]
-    pub fn Z3_mk_fpa_rne(c: Z3_context) -> Z3_ast;
+    pub fn Z3_mk_fpa_rne(c: Z3_context) -> Z3_sort;
 
     /// Create a numeral of RoundingMode sort which represents the NearestTiesToAway rounding mode.
     ///
@@ -6880,7 +6880,7 @@ extern "C" {
     /// - [`Z3_mk_fpa_round_toward_negative`]
     /// - [`Z3_mk_fpa_round_toward_positive`]
     /// - [`Z3_mk_fpa_round_toward_zero`]
-    pub fn Z3_mk_fpa_round_nearest_ties_to_away(c: Z3_context) -> Z3_ast;
+    pub fn Z3_mk_fpa_round_nearest_ties_to_away(c: Z3_context) -> Z3_sort;
 
     /// Create a numeral of RoundingMode sort which represents the NearestTiesToAway rounding mode.
     ///
@@ -6895,7 +6895,7 @@ extern "C" {
     /// - [`Z3_mk_fpa_rtn`]
     /// - [`Z3_mk_fpa_rtp`]
     /// - [`Z3_mk_fpa_rtz`]
-    pub fn Z3_mk_fpa_rna(c: Z3_context) -> Z3_ast;
+    pub fn Z3_mk_fpa_rna(c: Z3_context) -> Z3_sort;
 
     /// Create a numeral of RoundingMode sort which represents the TowardPositive rounding mode.
     ///
@@ -6910,7 +6910,7 @@ extern "C" {
     /// - [`Z3_mk_fpa_round_nearest_ties_to_even`]
     /// - [`Z3_mk_fpa_round_toward_negative`]
     /// - [`Z3_mk_fpa_round_toward_zero`]
-    pub fn Z3_mk_fpa_round_toward_positive(c: Z3_context) -> Z3_ast;
+    pub fn Z3_mk_fpa_round_toward_positive(c: Z3_context) -> Z3_sort;
 
     /// Create a numeral of RoundingMode sort which represents the TowardPositive rounding mode.
     ///
@@ -6925,7 +6925,7 @@ extern "C" {
     /// - [`Z3_mk_fpa_rne`]
     /// - [`Z3_mk_fpa_rtn`]
     /// - [`Z3_mk_fpa_rtz`]
-    pub fn Z3_mk_fpa_rtp(c: Z3_context) -> Z3_ast;
+    pub fn Z3_mk_fpa_rtp(c: Z3_context) -> Z3_sort;
 
     /// Create a numeral of RoundingMode sort which represents the TowardNegative rounding mode.
     ///
@@ -6940,7 +6940,7 @@ extern "C" {
     /// - [`Z3_mk_fpa_round_nearest_ties_to_even`]
     /// - [`Z3_mk_fpa_round_toward_positive`]
     /// - [`Z3_mk_fpa_round_toward_zero`]
-    pub fn Z3_mk_fpa_round_toward_negative(c: Z3_context) -> Z3_ast;
+    pub fn Z3_mk_fpa_round_toward_negative(c: Z3_context) -> Z3_sort;
 
     /// Create a numeral of RoundingMode sort which represents the TowardNegative rounding mode.
     ///
@@ -6955,7 +6955,7 @@ extern "C" {
     /// - [`Z3_mk_fpa_rne`]
     /// - [`Z3_mk_fpa_rtp`]
     /// - [`Z3_mk_fpa_rtz`]
-    pub fn Z3_mk_fpa_rtn(c: Z3_context) -> Z3_ast;
+    pub fn Z3_mk_fpa_rtn(c: Z3_context) -> Z3_sort;
 
     /// Create a numeral of RoundingMode sort which represents the TowardZero rounding mode.
     ///
@@ -6970,7 +6970,7 @@ extern "C" {
     /// - [`Z3_mk_fpa_round_nearest_ties_to_even`]
     /// - [`Z3_mk_fpa_round_toward_negative`]
     /// - [`Z3_mk_fpa_round_toward_positive`]
-    pub fn Z3_mk_fpa_round_toward_zero(c: Z3_context) -> Z3_ast;
+    pub fn Z3_mk_fpa_round_toward_zero(c: Z3_context) -> Z3_sort;
 
     /// Create a numeral of RoundingMode sort which represents the TowardZero rounding mode.
     ///
@@ -6985,7 +6985,7 @@ extern "C" {
     /// - [`Z3_mk_fpa_rne`]
     /// - [`Z3_mk_fpa_rtn`]
     /// - [`Z3_mk_fpa_rtp`]
-    pub fn Z3_mk_fpa_rtz(c: Z3_context) -> Z3_ast;
+    pub fn Z3_mk_fpa_rtz(c: Z3_context) -> Z3_sort;
 
     /// Create a FloatingPoint sort.
     ///

@@ -1033,17 +1033,17 @@ impl<'ctx> Float<'ctx> {
 
     // returns RoundingMode towards zero
     pub fn round_towards_zero(ctx: &'ctx Context) -> Float<'ctx> {
-        unsafe { Self::wrap(ctx, Z3_mk_fpa_round_toward_zero(ctx.z3_ctx)) }
+        unsafe { Self::wrap(ctx, Z3_mk_fpa_round_toward_zero(ctx.z3_ctx) as Z3_ast) }
     }
 
     // returns RoundingMode towards negative
     pub fn round_towards_negative(ctx: &'ctx Context) -> Float<'ctx> {
-        unsafe { Self::wrap(ctx, Z3_mk_fpa_round_toward_negative(ctx.z3_ctx)) }
+        unsafe { Self::wrap(ctx, Z3_mk_fpa_round_toward_negative(ctx.z3_ctx) as Z3_ast) }
     }
 
     // returns RoundingMode towards positive
     pub fn round_towards_positive(ctx: &'ctx Context) -> Float<'ctx> {
-        unsafe { Self::wrap(ctx, Z3_mk_fpa_round_toward_positive(ctx.z3_ctx)) }
+        unsafe { Self::wrap(ctx, Z3_mk_fpa_round_toward_positive(ctx.z3_ctx) as Z3_ast) }
     }
 
     // Add two floats of the same size, rounding towards zero
