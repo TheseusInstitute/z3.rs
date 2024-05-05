@@ -824,6 +824,10 @@ impl<'ctx> Int<'ctx> {
         unsafe { Self::wrap(ast.ctx, Z3_mk_real2int(ast.ctx.z3_ctx, ast.z3_ast)) }
     }
 
+    pub fn from_float(ast: &Float<'ctx>) -> Int<'ctx> {
+        ast.to_real().to_int()
+    }
+
     /// Create a real from an integer.
     /// This is just a convenience wrapper around
     /// [`Real::from_int()`]; see notes there.
@@ -949,6 +953,10 @@ impl<'ctx> Real<'ctx> {
         unsafe { Self::wrap(ast.ctx, Z3_mk_int2real(ast.ctx.z3_ctx, ast.z3_ast)) }
     }
 
+    pub fn from_float(ast: &Float<'ctx>) -> Real<'ctx> {
+        unsafe { Real::wrap(ast.ctx, Z3_mk_fpa_to_real(ast.ctx.z3_ctx, ast.z3_ast)) }
+    }
+
     /// Create an integer from a real.
     /// This is just a convenience wrapper around
     /// [`Int::from_real()`]; see notes there.
@@ -1044,6 +1052,53 @@ impl<'ctx> Float<'ctx> {
                 Z3_mk_fresh_const(ctx.z3_ctx, p, sort.z3_sort)
             })
         }
+    }
+
+    pub fn from_real(
+        ast: &Real<'ctx>,
+        rounding_mode: Float<'ctx>,
+        float_sort: Sort<'ctx>,
+    ) -> Float<'ctx> {
+        unsafe {
+            Self::wrap(
+                ast.ctx,
+                Z3_mk_fpa_to_fp_real(
+                    ast.get_ctx().get_z3_context(),
+                    rounding_mode.get_z3_ast(),
+                    ast.get_z3_ast(),
+                    float_sort.get_z3_sort(),
+                ),
+            )
+        }
+    }
+
+    pub fn from_real_float32(ast: &Real<'ctx>, rounding_mode: Float<'ctx>) -> Float<'ctx> {
+        let float_sort = Sort::float32(ast.ctx);
+        Self::from_real(ast, rounding_mode, float_sort)
+    }
+
+    pub fn from_real_double(ast: &Real<'ctx>, rounding_mode: Float<'ctx>) -> Float<'ctx> {
+        let float_sort = Sort::double(ast.ctx);
+        Self::from_real(ast, rounding_mode, float_sort)
+    }
+
+    pub fn from_int(ast: &Int<'ctx>, float_sort: Sort<'ctx>) -> Float<'ctx> {
+        let int_rounding_mode = Float::round_towards_zero(ast.ctx);
+        Self::from_real(&Real::from_int(ast), int_rounding_mode, float_sort)
+    }
+
+    /// Create a real from a float.
+    /// This is just a convenience wrapper around
+    /// [`Real::from_float()`]; see notes there.
+    pub fn to_real(&self) -> Real<'ctx> {
+        Real::from_float(self)
+    }
+
+    /// Create an int from a float.
+    /// This is just a convenience wrapper around
+    /// [`Int::from_float()`]; see notes there.
+    pub fn to_int(&self) -> Int<'ctx> {
+        Int::from_float(self)
     }
 
     // returns RoundingMode towards zero
