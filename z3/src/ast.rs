@@ -58,6 +58,13 @@ pub struct Array<'ctx> {
     pub(crate) z3_ast: Z3_ast,
 }
 
+/// [`Ast`] node representing a sequence of values.
+/// A sequence in Z3 is a bounded, ordered set of values.
+pub struct Seq<'ctx> {
+    pub(crate) ctx: &'ctx Context,
+    pub(crate) z3_ast: Z3_ast,
+}
+
 /// [`Ast`] node representing a set value.
 pub struct Set<'ctx> {
     pub(crate) ctx: &'ctx Context,
@@ -551,6 +558,8 @@ impl_ast!(BV);
 impl_from_try_into_dynamic!(BV, as_bv);
 impl_ast!(Array);
 impl_from_try_into_dynamic!(Array, as_array);
+impl_ast!(Seq);
+impl_from_try_into_dynamic!(Seq, as_seq);
 impl_ast!(Set);
 impl_from_try_into_dynamic!(Set, as_set);
 impl_ast!(Regexp);
@@ -1633,6 +1642,118 @@ impl<'ctx> Array<'ctx> {
     }
 }
 
+impl<'ctx> Seq<'ctx> {
+    pub fn new_const<S: Into<Symbol>>(
+        ctx: &'ctx Context,
+        name: S,
+        eltype: &Sort<'ctx>,
+    ) -> Seq<'ctx> {
+        let sort = Sort::seq(ctx, eltype);
+        unsafe {
+            Self::wrap(ctx, {
+                Z3_mk_const(ctx.z3_ctx, name.into().as_z3_symbol(ctx), sort.z3_sort)
+            })
+        }
+    }
+
+    pub fn fresh_const(ctx: &'ctx Context, prefix: &str, eltype: &Sort<'ctx>) -> Seq<'ctx> {
+        let sort = Sort::seq(ctx, eltype);
+        unsafe {
+            Self::wrap(ctx, {
+                let pp = CString::new(prefix).unwrap();
+                let p = pp.as_ptr();
+                Z3_mk_fresh_const(ctx.z3_ctx, p, sort.z3_sort)
+            })
+        }
+    }
+
+    /// Creates an empty seq
+    pub fn empty(ctx: &'ctx Context, domain: &Sort<'ctx>) -> Seq<'ctx> {
+        let seq_sort = Sort::seq(ctx, domain);
+        unsafe { Self::wrap(ctx, Z3_mk_seq_empty(ctx.z3_ctx, seq_sort.get_z3_sort())) }
+    }
+
+    pub fn unit<A>(element: &A) -> Seq<'ctx>
+    where
+        A: Ast<'ctx>,
+    {
+        unsafe {
+            let ctx = element.get_ctx();
+            Self::wrap(ctx, {
+                Z3_mk_seq_unit(ctx.get_z3_context(), element.get_z3_ast())
+            })
+        }
+    }
+
+    /// Add an element to the seq.
+    ///
+    /// Note that the `element` _must be_ of the `Seq`'s `eltype` sort.
+    //
+    // We avoid the binop! macro because the argument has a non-Self type
+    pub fn add<A>(&self, element: &A) -> Seq<'ctx>
+    where
+        A: Ast<'ctx>,
+    {
+        let unit_item = Self::unit(element);
+        unsafe {
+            Self::wrap(self.ctx, {
+                let args = [self.z3_ast, unit_item.get_z3_ast()];
+                Z3_mk_seq_concat(
+                    self.ctx.get_z3_context(),
+                    args.len().try_into().unwrap(),
+                    args.as_ptr() as *const Z3_ast,
+                )
+            })
+        }
+    }
+
+    // /// Remove an element from the seq.
+    // ///
+    // /// Note that the `element` _must be_ of the `Seq`'s `eltype` sort.
+    // //
+    // // We avoid the binop! macro because the argument has a non-Self type
+    // pub fn del<A>(&self, element: &A) -> Seq<'ctx>
+    // where
+    //     A: Ast<'ctx>,
+    // {
+    //     unsafe {
+    //         Self::wrap(self.ctx, {
+    //             Z3_mk_seq_del(self.ctx.z3_ctx, self.z3_ast, element.get_z3_ast())
+    //         })
+    //     }
+    // }
+
+    // /// Check if an item is a member of the seq.
+    // ///
+    // /// Note that the `element` _must be_ of the `Seq`'s `eltype` sort.
+    // //
+    // // We avoid the binop! macro because the argument has a non-Self type
+    // pub fn member<A>(&self, element: &A) -> Bool<'ctx>
+    // where
+    //     A: Ast<'ctx>,
+    // {
+    //     unsafe {
+    //         Bool::wrap(self.ctx, {
+    //             Z3_mk_seq_member(self.ctx.z3_ctx, element.get_z3_ast(), self.z3_ast)
+    //         })
+    //     }
+    // }
+
+    varop! {
+        /// Take the concatenation of a list of seqs.
+        seq_concat(Z3_mk_seq_concat, Self);
+    }
+    unop! {}
+    binop! {
+        /// Check if the seq is a subsequence of another seq.
+        seq_contains(Z3_mk_seq_contains, Bool<'ctx>);
+        /// Check if the seq starts with another seq.
+        seq_prefix(Z3_mk_seq_prefix, Bool<'ctx>);
+        /// Check if the seq ends with another seq.
+        seq_suffix(Z3_mk_seq_suffix, Bool<'ctx>);
+    }
+}
+
 impl<'ctx> Set<'ctx> {
     pub fn new_const<S: Into<Symbol>>(
         ctx: &'ctx Context,
@@ -1812,6 +1933,14 @@ impl<'ctx> Dynamic<'ctx> {
     pub fn as_array(&self) -> Option<Array<'ctx>> {
         match self.sort_kind() {
             SortKind::Array => Some(unsafe { Array::wrap(self.ctx, self.z3_ast) }),
+            _ => None,
+        }
+    }
+
+    /// Returns `None` if the `Dynamic` is not actually a `Seq`
+    pub fn as_seq(&self) -> Option<Seq<'ctx>> {
+        match self.sort_kind() {
+            SortKind::Seq => Some(unsafe { Seq::wrap(self.ctx, self.z3_ast) }),
             _ => None,
         }
     }

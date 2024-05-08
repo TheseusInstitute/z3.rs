@@ -66,6 +66,10 @@ impl<'ctx> Sort<'ctx> {
         }
     }
 
+    pub fn seq(ctx: &'ctx Context, elt: &Sort<'ctx>) -> Sort<'ctx> {
+        unsafe { Self::wrap(ctx, Z3_mk_seq_sort(ctx.z3_ctx, elt.z3_sort)) }
+    }
+
     pub fn set(ctx: &'ctx Context, elt: &Sort<'ctx>) -> Sort<'ctx> {
         unsafe { Self::wrap(ctx, Z3_mk_set_sort(ctx.z3_ctx, elt.z3_sort)) }
     }
@@ -200,6 +204,26 @@ impl<'ctx> Sort<'ctx> {
     /// ```
     pub fn is_array(&self) -> bool {
         self.kind() == SortKind::Array
+    }
+
+    /// Return if this Sort is for a `Seq`.
+    ///
+    /// # Examples
+    /// ```
+    /// # use z3::{Config, Context, Sort, ast::Ast, ast::Int, ast::Bool};
+    /// # let cfg = Config::new();
+    /// # let ctx = Context::new(&cfg);
+    /// let bool_sort = Sort::bool(&ctx);
+    /// let int_sort = Sort::int(&ctx);
+    /// let array_sort = Sort::array(&ctx, &int_sort, &bool_sort);
+    /// let seq_sort = Sort::array(&ctx, &int_sort, &bool_sort);
+    /// assert!(!array_sort.is_seq());
+    /// assert!(seq_sort.is_seq());
+    /// assert!(!int_sort.is_seq());
+    /// assert!(!bool_sort.is_seq());
+    /// ```
+    pub fn is_seq(&self) -> bool {
+        self.kind() == SortKind::Seq
     }
 
     /// Return the `Sort` of the domain for `Array`s of this `Sort`.
