@@ -1667,6 +1667,15 @@ impl<'ctx> Seq<'ctx> {
         }
     }
 
+    /// Fetches the sort of the content of this Seq
+    pub fn get_basis_sort(&self) -> Sort<'ctx> {
+        unsafe {
+            Sort::wrap(self.ctx, {
+                Z3_get_seq_sort_basis(self.ctx.z3_ctx, self.get_sort().get_z3_sort())
+            })
+        }
+    }
+
     /// Creates an empty seq
     pub fn empty(ctx: &'ctx Context, domain: &Sort<'ctx>) -> Seq<'ctx> {
         let seq_sort = Sort::seq(ctx, domain);

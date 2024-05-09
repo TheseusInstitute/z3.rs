@@ -3106,6 +3106,9 @@ extern "C" {
     /// Return the length of the sequence `s`.
     pub fn Z3_mk_seq_length(c: Z3_context, s: Z3_ast) -> Z3_ast;
 
+    /// Retrieve basis sort for sequence sort `s`. This is the sort of the inner elements.
+    pub fn Z3_get_seq_sort_basis(c: Z3_context, s: Z3_sort) -> Z3_sort;
+
     /// Return index of first occurrence of `substr` in `s` starting from offset `offset`.
     /// If `s` does not contain `substr`, then the value is -1, if `offset` is the length of `s`, then the value is -1 as well.
     /// The function is under-specified if `offset` is negative or larger than the length of `s`.
