@@ -3095,7 +3095,13 @@ extern "C" {
     pub fn Z3_mk_seq_replace(c: Z3_context, s: Z3_ast, src: Z3_ast, dst: Z3_ast) -> Z3_ast;
 
     /// Retrieve from `s` the unit sequence positioned at position `index`.
+    /// The sequence is empty if the index is out of bounds.
     pub fn Z3_mk_seq_at(c: Z3_context, s: Z3_ast, index: Z3_ast) -> Z3_ast;
+
+    /// Retrieve from `s` the unit sequence positioned at position `index`.
+    /// The function is under-specified if the index is out of bounds.
+    /// In other words, the result can be anything, and is a fresh constant.
+    pub fn Z3_mk_seq_nth(c: Z3_context, s: Z3_ast, index: Z3_ast) -> Z3_ast;
 
     /// Return the length of the sequence `s`.
     pub fn Z3_mk_seq_length(c: Z3_context, s: Z3_ast) -> Z3_ast;

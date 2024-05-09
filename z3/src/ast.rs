@@ -1707,6 +1707,79 @@ impl<'ctx> Seq<'ctx> {
         }
     }
 
+    /// Get unit-sequence of an element to from seq by static index.
+    /// If the index is out of bounds, the result is an empty sequence.
+    pub fn at_static(&self, index: impl Into<i64>) -> Seq<'ctx> {
+        Self::at(self, &Int::from_i64(&self.ctx, index.into()))
+    }
+
+    /// Get unit-sequence of an element to from seq by dynamic index.
+    /// If the index is out of bounds, the result is an empty sequence.
+    pub fn at(&self, index: &Int<'ctx>) -> Seq<'ctx> {
+        unsafe {
+            Ast::wrap(self.ctx, {
+                Z3_mk_seq_at(
+                    self.ctx.get_z3_context(),
+                    self.get_z3_ast(),
+                    index.get_z3_ast(),
+                )
+            })
+        }
+    }
+
+    /// Get unit-sequence of an element to from seq by static index.
+    /// If the index is out of bounds, the result is underspecified / a fresh constant.
+    pub fn nth_static(&self, index: impl Into<i64>) -> Seq<'ctx> {
+        Self::nth(self, &Int::from_i64(&self.ctx, index.into()))
+    }
+
+    /// Get unit-sequence of an element to from seq by dynamic index.
+    /// If the index is out of bounds, the result is underspecified / a fresh constant.
+    pub fn nth(&self, index: &Int<'ctx>) -> Seq<'ctx> {
+        unsafe {
+            Ast::wrap(self.ctx, {
+                Z3_mk_seq_nth(
+                    self.ctx.get_z3_context(),
+                    self.get_z3_ast(),
+                    index.get_z3_ast(),
+                )
+            })
+        }
+    }
+
+    // /// Get an element to from seq by static index.
+    // pub fn at_single_static<A>(&self, index: impl Into<i64>) -> A
+    // where
+    //     A: Ast<'ctx>,
+    // {
+    //     Self::at_single(self, &Int::from_i64(&self.ctx, index.into()))
+    // }
+
+    // /// Get an element to from seq by dynamic index.
+    // pub fn at_single<A>(&self, index: &Int<'ctx>) -> A
+    // where
+    //     A: Ast<'ctx>,
+    // {
+    //     unsafe {
+    //         Ast::wrap(self.ctx, {
+    //             Z3_mk_seq_at(
+    //                 self.ctx.get_z3_context(),
+    //                 self.get_z3_ast(),
+    //                 index.get_z3_ast(),
+    //             )
+    //         })
+    //     }
+    // }
+
+    /// Get the dynamic length of the sequence
+    pub fn len(&self) -> Int<'ctx> {
+        unsafe {
+            Ast::wrap(self.ctx, {
+                Z3_mk_seq_length(self.ctx.get_z3_context(), self.z3_ast)
+            })
+        }
+    }
+
     // /// Remove an element from the seq.
     // ///
     // /// Note that the `element` _must be_ of the `Seq`'s `eltype` sort.

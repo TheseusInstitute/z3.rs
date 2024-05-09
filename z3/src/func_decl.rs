@@ -12,6 +12,18 @@ impl<'ctx> FuncDecl<'ctx> {
         Self { ctx, z3_func_decl }
     }
 
+    pub fn get_context(&self) -> &'ctx Context {
+        self.ctx
+    }
+
+    pub fn get_z3_context(&self) -> Z3_context {
+        self.ctx.z3_ctx
+    }
+
+    pub fn get_z3_func_decl(&self) -> Z3_func_decl {
+        self.z3_func_decl
+    }
+
     pub fn new<S: Into<Symbol>>(
         ctx: &'ctx Context,
         name: S,
