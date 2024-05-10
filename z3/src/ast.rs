@@ -1694,6 +1694,75 @@ impl<'ctx> Seq<'ctx> {
         }
     }
 
+    /// Create a new sequence by mapping the function `f` over the items in this sequence.
+    pub fn map(&self, f: &FuncDecl<'ctx>) -> Seq<'ctx>
+    {
+        assert!(f.arity() == 1, "Fold reduction function must have arity of 1");
+        unsafe {
+            Self::wrap(self.ctx, {
+                Z3_mk_seq_map(
+                    self.ctx.get_z3_context(),
+                    f.get_z3_ast(),
+                    self.get_z3_ast(),
+                )
+            })
+        }
+    }
+
+    /// Create a new sequence by mapping the function `f` over the items in this sequence, starting at index i.
+    pub fn mapi(&self, f: &FuncDecl<'ctx>, i: Int<'ctx>) -> Seq<'ctx>
+    {
+        assert!(f.arity() == 1, "Fold reduction function must have arity of 1");
+        unsafe {
+            Self::wrap(self.ctx, {
+                Z3_mk_seq_mapi(
+                    self.ctx.get_z3_context(),
+                    f.get_z3_ast(),
+                    i.get_z3_ast(),
+                    self.get_z3_ast(),
+                )
+            })
+        }
+    }
+
+    /// Create a left-fold of the function `f` over the sequence with accumulator `a`.
+    pub fn foldl<A>(&self, f: &FuncDecl<'ctx>, a: &A) -> A
+    where
+        A: Ast<'ctx>,
+    {
+        assert!(f.arity() == 2, "Fold reduction function must have arity of 2");
+        unsafe {
+            Ast::wrap(self.ctx, {
+                Z3_mk_seq_foldl(
+                    self.ctx.get_z3_context(),
+                    f.get_z3_ast(),
+                    a.get_z3_ast(),
+                    self.get_z3_ast(),
+                )
+            })
+        }
+    }
+
+    /// Create a left-fold with index tracking of the function `f` over the sequence,
+    /// with accumulator `a` starting at index `i`.
+    pub fn foldli<A>(&self, f: &FuncDecl<'ctx>, a: &A, i: Int<'ctx>) -> A
+    where
+        A: Ast<'ctx>,
+    {
+        assert!(f.arity() == 2, "Fold reduction function must have arity of 2");
+        unsafe {
+            Ast::wrap(self.ctx, {
+                Z3_mk_seq_foldli(
+                    self.ctx.get_z3_context(),
+                    f.get_z3_ast(),
+                    i.get_z3_ast(),
+                    a.get_z3_ast(),
+                    self.get_z3_ast(),
+                )
+            })
+        }
+    }
+
     /// Add an element to the seq.
     ///
     /// Note that the `element` _must be_ of the `Seq`'s `eltype` sort.
@@ -1789,37 +1858,21 @@ impl<'ctx> Seq<'ctx> {
         }
     }
 
-    // /// Remove an element from the seq.
-    // ///
-    // /// Note that the `element` _must be_ of the `Seq`'s `eltype` sort.
-    // //
-    // // We avoid the binop! macro because the argument has a non-Self type
-    // pub fn del<A>(&self, element: &A) -> Seq<'ctx>
-    // where
-    //     A: Ast<'ctx>,
-    // {
-    //     unsafe {
-    //         Self::wrap(self.ctx, {
-    //             Z3_mk_seq_del(self.ctx.z3_ctx, self.z3_ast, element.get_z3_ast())
-    //         })
-    //     }
-    // }
-
-    // /// Check if an item is a member of the seq.
-    // ///
-    // /// Note that the `element` _must be_ of the `Seq`'s `eltype` sort.
-    // //
-    // // We avoid the binop! macro because the argument has a non-Self type
-    // pub fn member<A>(&self, element: &A) -> Bool<'ctx>
-    // where
-    //     A: Ast<'ctx>,
-    // {
-    //     unsafe {
-    //         Bool::wrap(self.ctx, {
-    //             Z3_mk_seq_member(self.ctx.z3_ctx, element.get_z3_ast(), self.z3_ast)
-    //         })
-    //     }
-    // }
+    /// Check if an item is a member of the seq.
+    ///
+    /// Note that the `element` _must be_ of the `Seq`'s `eltype` sort.
+    //
+    // We avoid the binop! macro because the argument has a non-Self type
+    pub fn member<A>(&self, element: &A) -> Bool<'ctx>
+    where
+        A: Ast<'ctx>,
+    {
+        unsafe {
+            Bool::wrap(self.ctx, {
+                Z3_mk_seq_contains(self.ctx.z3_ctx, self.z3_ast, Seq::unit(element).get_z3_ast())
+            })
+        }
+    }
 
     varop! {
         /// Take the concatenation of a list of seqs.
