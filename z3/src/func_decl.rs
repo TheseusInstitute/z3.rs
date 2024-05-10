@@ -24,6 +24,10 @@ impl<'ctx> FuncDecl<'ctx> {
         self.z3_func_decl
     }
 
+    pub fn get_z3_ast(&self) -> Z3_ast {
+        unsafe { Z3_func_decl_to_ast(self.ctx.z3_ctx, self.z3_func_decl) }
+    }
+
     pub fn new<S: Into<Symbol>>(
         ctx: &'ctx Context,
         name: S,

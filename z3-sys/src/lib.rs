@@ -2410,6 +2410,9 @@ extern "C" {
     /// The nodes `t1` and `t2` must have the same sort, and must be int or real.
     pub fn Z3_mk_ge(c: Z3_context, t1: Z3_ast, t2: Z3_ast) -> Z3_ast;
 
+    /// Take the absolute value of an integer.
+    pub fn Z3_mk_abs(c: Z3_context, arg: Z3_ast) -> Z3_ast;
+
     /// Coerce an integer to a real.
     ///
     /// There is also a converse operation exposed.
@@ -3073,6 +3076,19 @@ extern "C" {
     ///
     /// - `prefix` and `s` are the same sequence sorts.
     pub fn Z3_mk_seq_prefix(c: Z3_context, prefix: Z3_ast, s: Z3_ast) -> Z3_ast;
+
+    /// Create a map of the function `f` over the sequence `s`.
+    pub fn Z3_mk_seq_map(c: Z3_context, f: Z3_ast, s: Z3_ast) -> Z3_ast;
+
+    /// Create a map of the function `f` over the sequence `s` starting at index `i`.
+    pub fn Z3_mk_seq_mapi(c: Z3_context, f: Z3_ast, i: Z3_ast, s: Z3_ast) -> Z3_ast;
+
+    /// Create a left-fold of the function `f` over the sequence `s` with accumulator `a`.
+    pub fn Z3_mk_seq_foldl(c: Z3_context, f: Z3_ast, a: Z3_ast, s: Z3_ast) -> Z3_ast;
+
+    /// Create a left-fold with index tracking of the function `f` over the sequence `s`
+    /// with accumulator `a` starting at index `i`.
+    pub fn Z3_mk_seq_foldli(c: Z3_context, f: Z3_ast, i: Z3_ast, a: Z3_ast, s: Z3_ast) -> Z3_ast;
 
     /// Check if `suffix` is a suffix of `s`.
     ///
