@@ -58,6 +58,13 @@ pub struct Array<'ctx> {
     pub(crate) z3_ast: Z3_ast,
 }
 
+/// [`Ast`] node representing a lambda expression.
+/// A lambda in Z3 is a mapping from bindings to a return value.
+pub struct Lambda<'ctx> {
+    pub(crate) ctx: &'ctx Context,
+    pub(crate) z3_ast: Z3_ast,
+}
+
 /// [`Ast`] node representing a sequence of values.
 /// A sequence in Z3 is a bounded, ordered set of values.
 pub struct Seq<'ctx> {
@@ -558,6 +565,8 @@ impl_ast!(BV);
 impl_from_try_into_dynamic!(BV, as_bv);
 impl_ast!(Array);
 impl_from_try_into_dynamic!(Array, as_array);
+impl_ast!(Lambda);
+impl_from_try_into_dynamic!(Lambda, as_lambda);
 impl_ast!(Seq);
 impl_from_try_into_dynamic!(Seq, as_seq);
 impl_ast!(Set);
@@ -705,6 +714,25 @@ impl<'ctx> Bool<'ctx> {
                 Z3_mk_ite(self.ctx.z3_ctx, self.z3_ast, a.get_z3_ast(), b.get_z3_ast())
             })
         }
+    }
+
+    pub fn _ne(&self, other: &Self) -> Bool<'ctx> {
+        unsafe {
+            Bool::wrap(self.ctx, {
+                Z3_mk_not(
+                    self.ctx.z3_ctx,
+                    Z3_mk_eq(self.ctx.z3_ctx, self.z3_ast, other.z3_ast),
+                )
+            })
+        }
+    }
+
+    pub fn _and(&self, other: &Self) -> Bool<'ctx> {
+        Self::and(self.ctx, &[self, other])
+    }
+
+    pub fn _or(&self, other: &Self) -> Bool<'ctx> {
+        Self::or(self.ctx, &[self, other])
     }
 
     varop! {
@@ -1642,6 +1670,205 @@ impl<'ctx> Array<'ctx> {
     }
 }
 
+impl<'ctx> Lambda<'ctx> {
+    /// Create a `Lambda` which, like an array, maps from bindings
+    /// in the `domain` `Sort`s to values of the `range` `Sort`.
+    pub fn new_const<S: Into<Symbol>>(
+        ctx: &'ctx Context,
+        name: S,
+        domain: &Sort<'ctx>,
+        range: &Sort<'ctx>,
+    ) -> Self {
+        let sort = Sort::array(ctx, domain, range);
+        unsafe {
+            Self::wrap(ctx, {
+                Z3_mk_const(ctx.z3_ctx, name.into().as_z3_symbol(ctx), sort.z3_sort)
+            })
+        }
+    }
+
+    pub fn builder(
+        ctx: &'ctx Context,
+        build: impl for<'b> FnOnce(&'b mut lambda::Builder<'ctx>) -> lambda::BuildInvocation<'b, 'ctx>,
+    ) -> Self {
+        let mut builder = lambda::Builder::new(ctx);
+        let body = build(&mut builder);
+        body.eval()
+    }
+
+    pub fn builder_fallible<E>(
+        ctx: &'ctx Context,
+        build: impl for<'b> FnOnce(
+            &'b mut lambda::Builder<'ctx>,
+        ) -> Result<lambda::BuildInvocation<'b, 'ctx>, E>,
+    ) -> Result<Self, E> {
+        let mut builder = lambda::Builder::new(ctx);
+        let body = build(&mut builder)?;
+        Ok(body.eval())
+    }
+}
+
+pub mod lambda {
+    use super::*;
+
+    use crate::{Context, Sort, Symbol};
+
+    #[derive(Debug)]
+    struct Binding<'ctx> {
+        _ctx: &'ctx Context,
+        name: Symbol,
+        sort: Sort<'ctx>,
+        _value: Dynamic<'ctx>,
+    }
+
+    impl<'ctx> Binding<'ctx> {
+        pub fn new<A: Ast<'ctx> + Clone>(
+            ctx: &'ctx Context,
+            name: impl Into<Symbol>,
+            sort: &Sort<'ctx>,
+            value: &A,
+        ) -> Self
+        where
+            A: Into<Dynamic<'ctx>>,
+        {
+            Self {
+                _ctx: ctx,
+                name: name.into(),
+                sort: sort.clone(),
+                _value: value.clone().into(),
+            }
+        }
+
+        pub fn get_sort(&self) -> Sort<'ctx> {
+            self.sort.clone()
+        }
+
+        pub fn get_name(&self) -> &Symbol {
+            &self.name
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct BuildInvocation<'b, 'ctx> {
+        _builder_ref: &'b mut Builder<'ctx>,
+        constructed: Lambda<'ctx>,
+    }
+
+    impl<'b, 'ctx> BuildInvocation<'b, 'ctx> {
+        pub(crate) fn eval(self) -> Lambda<'ctx> {
+            self.constructed
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct Builder<'ctx> {
+        ctx: &'ctx Context,
+        bindings: Vec<Binding<'ctx>>,
+    }
+
+    impl<'ctx> Builder<'ctx> {
+        pub fn new(ctx: &'ctx Context) -> Self {
+            Self {
+                ctx,
+                bindings: Vec::new(),
+            }
+        }
+
+        pub fn get_ctx(&self) -> &'ctx Context {
+            self.ctx
+        }
+
+        /// Creates a new binding.
+        ///
+        /// Due to limitations in Rust's variadic support, Bindings must be declared
+        /// in reverse order from their intended ordering in the lambda parameters.
+        ///
+        /// In other words, creating `f :: a -> b -> c` requires binding in order `c`, `b`, `a`.
+        pub fn bind(&mut self, name: impl Into<Symbol>, sort: Sort<'ctx>) -> Dynamic<'ctx> {
+            let name = name.into();
+            let value = unsafe {
+                Dynamic::wrap(
+                    self.get_ctx(),
+                    Z3_mk_bound(
+                        self.get_ctx().get_z3_context(),
+                        self.bindings.len() as u32,
+                        sort.z3_sort,
+                    ),
+                )
+            };
+            let binding = Binding::new(self.ctx, name, &sort, &value);
+            // "Z3 applies the convention that the last element in the decl_names and
+            //  sorts array refers to the variable with index 0, the second to last element
+            //  of decl_names and sorts refers to the variable with index 1, etc."
+            self.bindings.insert(0, binding);
+            value
+        }
+
+        /// Creates a new binding with a particular type.
+        ///
+        /// Sort is not verified to match the type of the given AST.
+        ///
+        /// Due to limitations in Rust's variadic support, Bindings must be declared
+        /// in reverse order from their intended ordering in the lambda parameters.
+        ///
+        /// In other words, creating `f :: a -> b -> c` requires binding in order `c`, `b`, `a`.
+        pub fn bind_typed<A>(&mut self, name: impl Into<Symbol>, sort: Sort<'ctx>) -> A
+        where
+            A: Ast<'ctx> + Clone + Into<Dynamic<'ctx>>,
+        {
+            let name = name.into();
+            let value = unsafe {
+                A::wrap(
+                    self.get_ctx(),
+                    Z3_mk_bound(
+                        self.get_ctx().get_z3_context(),
+                        self.bindings.len() as u32,
+                        sort.z3_sort,
+                    ),
+                )
+            };
+            let binding = Binding::new(self.ctx, name, &sort, &value);
+            // "Z3 applies the convention that the last element in the decl_names and
+            //  sorts array refers to the variable with index 0, the second to last element
+            //  of decl_names and sorts refers to the variable with index 1, etc."
+            self.bindings.insert(0, binding);
+            value
+        }
+
+        pub fn build<'b, F, A>(&'b mut self, make_body: F) -> BuildInvocation<'b, 'ctx>
+        where
+            A: Ast<'ctx>,
+            F: FnOnce(&'ctx Context) -> A,
+        {
+            let bindings = &self.bindings;
+            let ctx = self.ctx;
+            let sorts = bindings.iter().map(|b| b.get_sort()).collect::<Vec<_>>();
+            let names = bindings.iter().map(|b| b.get_name()).collect::<Vec<_>>();
+            let body = make_body(ctx);
+            let constructed = unsafe {
+                let sorts = sorts.iter().map(|s| s.z3_sort).collect::<Vec<_>>();
+                let names = names
+                    .into_iter()
+                    .map(|n| n.as_z3_symbol(ctx))
+                    .collect::<Vec<_>>();
+                Lambda::wrap(ctx, {
+                    Z3_mk_lambda(
+                        ctx.z3_ctx,
+                        std::ffi::c_uint::from(bindings.len() as u32),
+                        sorts.as_ptr() as *const Z3_sort,
+                        names.as_ptr() as *const Z3_symbol,
+                        body.get_z3_ast(),
+                    )
+                })
+            };
+            BuildInvocation {
+                _builder_ref: self,
+                constructed,
+            }
+        }
+    }
+}
+
 impl<'ctx> Seq<'ctx> {
     pub fn new_const<S: Into<Symbol>>(
         ctx: &'ctx Context,
@@ -1665,6 +1892,27 @@ impl<'ctx> Seq<'ctx> {
                 Z3_mk_fresh_const(ctx.z3_ctx, p, sort.z3_sort)
             })
         }
+    }
+
+    pub fn literal<A>(ctx: &'ctx Context, sort: &Sort<'ctx>, values: &[&A]) -> Seq<'ctx>
+    where
+        A: Ast<'ctx>,
+    {
+        for (idx, value) in values.iter().enumerate() {
+            assert_eq!(
+                value.get_sort(),
+                *sort,
+                "Literal value sort mismatch in sequence literal construction at idx {}",
+                idx
+            );
+        }
+        Self::seq_concat(
+            ctx,
+            &values
+                .into_iter()
+                .map(|v| Self::unit(*v))
+                .collect::<Vec<_>>(),
+        )
     }
 
     /// Fetches the sort of the content of this Seq
@@ -1695,63 +1943,156 @@ impl<'ctx> Seq<'ctx> {
     }
 
     /// Create a new sequence by mapping the function `f` over the items in this sequence.
-    pub fn map(&self, f: &FuncDecl<'ctx>) -> Seq<'ctx>
-    {
-        assert!(f.arity() == 1, "Fold reduction function must have arity of 1");
+    pub fn map(&self, f: &Lambda<'ctx>) -> Seq<'ctx> {
         unsafe {
-            Self::wrap(self.ctx, {
-                Z3_mk_seq_map(
-                    self.ctx.get_z3_context(),
-                    f.get_z3_ast(),
-                    self.get_z3_ast(),
+            let arity = Z3_get_quantifier_num_bound(self.ctx.get_z3_context(), f.get_z3_ast());
+            assert!(
+                arity == 1,
+                "Mapping function must have arity of 1; provided mapper has {}",
+                arity,
+            );
+            let res =
+                { Z3_mk_seq_map(self.ctx.get_z3_context(), f.get_z3_ast(), self.get_z3_ast()) };
+            if res.is_null() {
+                let code = Z3_get_error_code(self.ctx.get_z3_context());
+                let msg = Z3_get_error_msg(self.ctx.get_z3_context(), code);
+                let error = CStr::from_ptr(msg);
+                panic!(
+                    "Error in Z3_mk_seq_map on {:?} => {:?}: {}",
+                    f,
+                    self,
+                    error.to_string_lossy()
                 )
-            })
+            } else {
+                Ast::wrap(self.ctx, res)
+            }
         }
     }
 
-    /// Create a new sequence by mapping the function `f` over the items in this sequence, starting at index i.
-    pub fn mapi(&self, f: &FuncDecl<'ctx>, i: Int<'ctx>) -> Seq<'ctx>
+    pub fn map_with<A>(&self, f: impl FnOnce(&Dynamic<'ctx>) -> A) -> Seq<'ctx>
+    where
+        A: Ast<'ctx>,
     {
-        assert!(f.arity() == 1, "Fold reduction function must have arity of 1");
+        let lambda = Lambda::builder(self.ctx, |builder| {
+            let value = builder.bind("seq_map_value", self.get_basis_sort());
+            builder.build(|_ctx| f(&value))
+        });
+        self.map(&lambda)
+    }
+
+    /// Create a new sequence by mapping the function `f` over the items in this sequence, starting at index i.
+    pub fn mapi(&self, f: &Lambda<'ctx>, i: &Int<'ctx>) -> Seq<'ctx> {
         unsafe {
-            Self::wrap(self.ctx, {
+            let arity = Z3_get_quantifier_num_bound(self.ctx.get_z3_context(), f.get_z3_ast());
+            assert!(
+                arity == 2,
+                "Indexed Mapping function must have arity of 2; provided mapper has {}",
+                arity,
+            );
+            let res = {
                 Z3_mk_seq_mapi(
                     self.ctx.get_z3_context(),
                     f.get_z3_ast(),
                     i.get_z3_ast(),
                     self.get_z3_ast(),
                 )
-            })
+            };
+            if res.is_null() {
+                let code = Z3_get_error_code(self.ctx.get_z3_context());
+                let msg = Z3_get_error_msg(self.ctx.get_z3_context(), code);
+                let error = CStr::from_ptr(msg);
+                panic!(
+                    "Error in Z3_mk_seq_mapi on {:?} => {:?}: {}",
+                    f,
+                    self,
+                    error.to_string_lossy()
+                )
+            } else {
+                Ast::wrap(self.ctx, res)
+            }
         }
     }
 
-    /// Create a left-fold of the function `f` over the sequence with accumulator `a`.
-    pub fn foldl<A>(&self, f: &FuncDecl<'ctx>, a: &A) -> A
+    pub fn mapi_with<A>(
+        &self,
+        f: impl FnOnce(&Int<'ctx>, &Dynamic<'ctx>) -> A,
+        offset: &Int<'ctx>,
+    ) -> Seq<'ctx>
     where
         A: Ast<'ctx>,
     {
-        assert!(f.arity() == 2, "Fold reduction function must have arity of 2");
+        let lambda = Lambda::builder(self.ctx, |builder| {
+            let value = builder.bind("seq_mapi_value", self.get_basis_sort());
+            let index = builder.bind_typed::<Int<'ctx>>("seq_mapi_index", Sort::int(self.ctx));
+            builder.build(|_ctx| f(&index, &value))
+        });
+        self.mapi(&lambda, offset)
+    }
+
+    /// Create a left-fold of the function `f` over the sequence with accumulator `a`.
+    pub fn foldl<A>(&self, f: &Lambda<'ctx>, a: &A) -> A
+    where
+        A: Ast<'ctx>,
+    {
         unsafe {
-            Ast::wrap(self.ctx, {
+            let arity = Z3_get_quantifier_num_bound(self.ctx.get_z3_context(), f.get_z3_ast());
+            assert!(
+                arity == 2,
+                "Fold reduction function must have arity of 2; provided function has {}",
+                arity,
+            );
+            let res = {
                 Z3_mk_seq_foldl(
                     self.ctx.get_z3_context(),
                     f.get_z3_ast(),
                     a.get_z3_ast(),
                     self.get_z3_ast(),
+                    // a.safe_decl().expect("Must be a decl now").get_z3_ast(),
+                    // self.safe_decl().expect("Must be a decl now").get_z3_ast(),
                 )
-            })
+            };
+            if res.is_null() {
+                let code = Z3_get_error_code(self.ctx.get_z3_context());
+                let msg = Z3_get_error_msg(self.ctx.get_z3_context(), code);
+                let error = CStr::from_ptr(msg);
+                panic!(
+                    "Error in Z3_mk_seq_foldl on {:?} => {:?}: {}",
+                    f,
+                    self,
+                    error.to_string_lossy()
+                )
+            } else {
+                Ast::wrap(self.ctx, res)
+            }
         }
+    }
+
+    pub fn foldl_with<A>(&self, f: impl FnOnce(&A, &Dynamic<'ctx>) -> A, initial: &A) -> A
+    where
+        A: Ast<'ctx> + Clone + Into<Dynamic<'ctx>>,
+    {
+        let lambda = Lambda::builder(self.ctx, |builder| {
+            let value = builder.bind("seq_foldl_value", self.get_basis_sort());
+            let memo = builder.bind_typed::<A>("seq_foldl_memo", initial.get_sort());
+            builder.build(|_ctx| f(&memo, &value))
+        });
+        self.foldl::<A>(&lambda, &initial)
     }
 
     /// Create a left-fold with index tracking of the function `f` over the sequence,
     /// with accumulator `a` starting at index `i`.
-    pub fn foldli<A>(&self, f: &FuncDecl<'ctx>, a: &A, i: Int<'ctx>) -> A
+    pub fn foldli<A>(&self, f: &Lambda<'ctx>, a: &A, i: &Int<'ctx>) -> A
     where
         A: Ast<'ctx>,
     {
-        assert!(f.arity() == 2, "Fold reduction function must have arity of 2");
         unsafe {
-            Ast::wrap(self.ctx, {
+            let arity = Z3_get_quantifier_num_bound(self.ctx.get_z3_context(), f.get_z3_ast());
+            assert!(
+                arity == 3,
+                "Indexed fold reduction function must have arity of 3; provided function has {}",
+                arity,
+            );
+            let res = {
                 Z3_mk_seq_foldli(
                     self.ctx.get_z3_context(),
                     f.get_z3_ast(),
@@ -1759,8 +2100,39 @@ impl<'ctx> Seq<'ctx> {
                     a.get_z3_ast(),
                     self.get_z3_ast(),
                 )
-            })
+            };
+            if res.is_null() {
+                let code = Z3_get_error_code(self.ctx.get_z3_context());
+                let msg = Z3_get_error_msg(self.ctx.get_z3_context(), code);
+                let error = CStr::from_ptr(msg);
+                panic!(
+                    "Error in Z3_mk_seq_foldli on {:?} => {:?}: {}",
+                    f,
+                    self,
+                    error.to_string_lossy()
+                )
+            } else {
+                Ast::wrap(self.ctx, res)
+            }
         }
+    }
+
+    pub fn foldli_with<A>(
+        &self,
+        f: impl FnOnce(&Int<'ctx>, &A, &Dynamic<'ctx>) -> A,
+        initial: &A,
+        offset: &Int<'ctx>,
+    ) -> A
+    where
+        A: Ast<'ctx> + Clone + Into<Dynamic<'ctx>>,
+    {
+        let lambda = Lambda::builder(self.ctx, |builder| {
+            let value = builder.bind("seq_foldli_value", self.get_basis_sort());
+            let memo = builder.bind_typed::<A>("seq_foldli_memo", initial.get_sort());
+            let index = builder.bind_typed::<Int<'ctx>>("seq_foldli_index", Sort::int(self.ctx));
+            builder.build(|_ctx| f(&index, &memo, &value))
+        });
+        self.foldli::<A>(&lambda, &initial, &offset)
     }
 
     /// Add an element to the seq.
@@ -1785,12 +2157,6 @@ impl<'ctx> Seq<'ctx> {
         }
     }
 
-    /// Get unit-sequence of an element to from seq by static index.
-    /// If the index is out of bounds, the result is an empty sequence.
-    pub fn at_static(&self, index: impl Into<i64>) -> Seq<'ctx> {
-        Self::at(self, &Int::from_i64(&self.ctx, index.into()))
-    }
-
     /// Get unit-sequence of an element to from seq by dynamic index.
     /// If the index is out of bounds, the result is an empty sequence.
     pub fn at(&self, index: &Int<'ctx>) -> Seq<'ctx> {
@@ -1806,14 +2172,14 @@ impl<'ctx> Seq<'ctx> {
     }
 
     /// Get unit-sequence of an element to from seq by static index.
-    /// If the index is out of bounds, the result is underspecified / a fresh constant.
-    pub fn nth_static(&self, index: impl Into<i64>) -> Seq<'ctx> {
-        Self::nth(self, &Int::from_i64(&self.ctx, index.into()))
+    /// If the index is out of bounds, the result is an empty sequence.
+    pub fn at_static(&self, index: impl Into<i64>) -> Seq<'ctx> {
+        Self::at(self, &Int::from_i64(&self.ctx, index.into()))
     }
 
-    /// Get unit-sequence of an element to from seq by dynamic index.
+    /// Get an individual element from this seq by dynamic index.
     /// If the index is out of bounds, the result is underspecified / a fresh constant.
-    pub fn nth(&self, index: &Int<'ctx>) -> Seq<'ctx> {
+    pub fn nth(&self, index: &Int<'ctx>) -> Dynamic<'ctx> {
         unsafe {
             Ast::wrap(self.ctx, {
                 Z3_mk_seq_nth(
@@ -1825,29 +2191,11 @@ impl<'ctx> Seq<'ctx> {
         }
     }
 
-    // /// Get an element to from seq by static index.
-    // pub fn at_single_static<A>(&self, index: impl Into<i64>) -> A
-    // where
-    //     A: Ast<'ctx>,
-    // {
-    //     Self::at_single(self, &Int::from_i64(&self.ctx, index.into()))
-    // }
-
-    // /// Get an element to from seq by dynamic index.
-    // pub fn at_single<A>(&self, index: &Int<'ctx>) -> A
-    // where
-    //     A: Ast<'ctx>,
-    // {
-    //     unsafe {
-    //         Ast::wrap(self.ctx, {
-    //             Z3_mk_seq_at(
-    //                 self.ctx.get_z3_context(),
-    //                 self.get_z3_ast(),
-    //                 index.get_z3_ast(),
-    //             )
-    //         })
-    //     }
-    // }
+    /// Get an element from this seq by static index.
+    /// If the index is out of bounds, the result is underspecified / a fresh constant.
+    pub fn nth_static(&self, index: impl Into<i64>) -> Dynamic<'ctx> {
+        Self::nth(self, &Int::from_i64(&self.ctx, index.into()))
+    }
 
     /// Get the dynamic length of the sequence
     pub fn len(&self) -> Int<'ctx> {
@@ -1869,7 +2217,11 @@ impl<'ctx> Seq<'ctx> {
     {
         unsafe {
             Bool::wrap(self.ctx, {
-                Z3_mk_seq_contains(self.ctx.z3_ctx, self.z3_ast, Seq::unit(element).get_z3_ast())
+                Z3_mk_seq_contains(
+                    self.ctx.z3_ctx,
+                    self.z3_ast,
+                    Seq::unit(element).get_z3_ast(),
+                )
             })
         }
     }
@@ -2072,6 +2424,20 @@ impl<'ctx> Dynamic<'ctx> {
         }
     }
 
+    /// Returns `None` if the `Dynamic` is not actually an `Array`
+    pub fn as_lambda(&self) -> Option<Lambda<'ctx>> {
+        match self.sort_kind() {
+            SortKind::Array => {
+                if unsafe { Z3_is_lambda(self.ctx.z3_ctx, self.z3_ast) } {
+                    Some(unsafe { Lambda::wrap(self.ctx, self.z3_ast) })
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     /// Returns `None` if the `Dynamic` is not actually a `Seq`
     pub fn as_seq(&self) -> Option<Seq<'ctx>> {
         match self.sort_kind() {
@@ -2270,7 +2636,7 @@ pub fn forall_const<'ctx>(
 
     unsafe {
         Ast::wrap(ctx, {
-            Z3_mk_forall_const(
+            let result = Z3_mk_forall_const(
                 ctx.z3_ctx,
                 0,
                 bounds.len().try_into().unwrap(),
@@ -2278,7 +2644,26 @@ pub fn forall_const<'ctx>(
                 patterns.len().try_into().unwrap(),
                 patterns.as_ptr() as *const Z3_pattern,
                 body.get_z3_ast(),
-            )
+            );
+            match Z3_get_error_code(ctx.get_z3_context()) {
+                ErrorCode::OK => {
+                    assert!(
+                        !result.is_null(),
+                        "Z3_mk_forall_const returned null with no error"
+                    );
+                    result
+                }
+                err => {
+                    let msg = Z3_get_error_msg(ctx.get_z3_context(), err);
+                    assert!(
+                        !msg.is_null(),
+                        "Z3_get_error_msg returned null for code {:?}",
+                        err
+                    );
+                    let error = CStr::from_ptr(msg);
+                    panic!("Error in Z3_mk_forall_const: {}", error.to_string_lossy())
+                }
+            }
         })
     }
 }
@@ -2331,7 +2716,7 @@ pub fn exists_const<'ctx>(
 
     unsafe {
         Ast::wrap(ctx, {
-            Z3_mk_exists_const(
+            let result = Z3_mk_exists_const(
                 ctx.z3_ctx,
                 0,
                 bounds.len().try_into().unwrap(),
@@ -2339,7 +2724,26 @@ pub fn exists_const<'ctx>(
                 patterns.len().try_into().unwrap(),
                 patterns.as_ptr() as *const Z3_pattern,
                 body.get_z3_ast(),
-            )
+            );
+            match Z3_get_error_code(ctx.get_z3_context()) {
+                ErrorCode::OK => {
+                    assert!(
+                        !result.is_null(),
+                        "Z3_mk_exists_const returned null with no error"
+                    );
+                    result
+                }
+                err => {
+                    let msg = Z3_get_error_msg(ctx.get_z3_context(), err);
+                    assert!(
+                        !msg.is_null(),
+                        "Z3_get_error_msg returned null for code {:?}",
+                        err
+                    );
+                    let error = CStr::from_ptr(msg);
+                    panic!("Error in Z3_mk_exists_const: {}", error.to_string_lossy())
+                }
+            }
         })
     }
 }

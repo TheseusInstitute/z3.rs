@@ -113,6 +113,67 @@ impl<'ctx> FuncDecl<'ctx> {
             }
         }
     }
+
+    pub fn get_domain(&self, idx: usize) -> Option<Sort<'ctx>> {
+        if idx >= self.arity() {
+            return None;
+        }
+
+        unsafe {
+            let z3_sort = Z3_get_domain(self.ctx.z3_ctx, self.z3_func_decl, idx as u32);
+            if z3_sort.is_null() {
+                None
+            } else {
+                Some(Sort::wrap(self.ctx, z3_sort))
+            }
+        }
+    }
+
+    pub fn get_param_name(&self, idx: usize) -> Option<Symbol> {
+        if idx >= self.arity() {
+            return None;
+        }
+
+        unsafe {
+            let z3_sort =
+                Z3_get_decl_symbol_parameter(self.ctx.z3_ctx, self.z3_func_decl, idx as u32);
+            if Z3_get_error_code(self.ctx.z3_ctx) != ErrorCode::OK || z3_sort.is_null() {
+                None
+            } else {
+                Some(Symbol::wrap(self.ctx, z3_sort))
+            }
+        }
+    }
+
+    pub fn into_lambda(&self) -> Option<ast::Lambda<'ctx>> {
+        ast::Lambda::builder_fallible::<()>(self.ctx, |builder| {
+            // Build parameters in reverse order, as this approximates de-bruijn order
+            let arity = self.arity();
+            let mut parameters = Vec::with_capacity(arity);
+            let self_name = self.name();
+            for i in (0..arity).rev() {
+                let param_name: Symbol = self
+                    .get_param_name(i)
+                    .unwrap_or_else(|| Symbol::String(format!("{}{}", self_name.as_str(), i)));
+                let var = builder.bind(param_name, self.get_domain(i).ok_or(())?);
+                parameters.push(var);
+            }
+            parameters.reverse();
+
+            Ok(builder.build(|_ctx| {
+                let parameters = parameters
+                    .iter()
+                    .map(|v| v as &dyn Ast<'ctx>)
+                    .collect::<Vec<_>>();
+                self.apply(parameters.as_slice())
+            }))
+        })
+        .ok()
+    }
+
+    pub fn as_dynamic(&self) -> ast::Dynamic<'ctx> {
+        unsafe { ast::Dynamic::wrap(self.ctx, self.get_z3_ast()) }
+    }
 }
 
 impl<'ctx> fmt::Display for FuncDecl<'ctx> {
