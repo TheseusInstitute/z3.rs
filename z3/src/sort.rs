@@ -12,6 +12,10 @@ impl<'ctx> Sort<'ctx> {
         Sort { ctx, z3_sort }
     }
 
+    pub fn get_ctx(&self) -> &'ctx Context {
+        self.ctx
+    }
+
     pub fn get_z3_sort(&self) -> Z3_sort {
         self.z3_sort
     }
